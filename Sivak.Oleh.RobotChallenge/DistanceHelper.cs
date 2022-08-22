@@ -2,7 +2,7 @@
 
 namespace Sivak.Oleh.RobotChallenge
 {
-    internal class DistanceHelper
+    public class DistanceHelper
     {
         public static int FindDistance(Position a, Position b)
         {
