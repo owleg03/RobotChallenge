@@ -4,7 +4,7 @@ using FluentAssertions;
 
 namespace Sivak.Oleh.RobotChallenge.Test
 {
-    public class Tests
+    public class DistanceHelperTest
     {
         [Test]
         public void FindDistance_NormalValues_ReturnsDistance()
