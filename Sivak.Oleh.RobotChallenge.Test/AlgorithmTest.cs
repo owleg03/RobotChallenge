@@ -112,6 +112,12 @@ namespace Sivak.Oleh.RobotChallenge.Test
                 new Robot.Common.Robot() { Energy = 400, Position = new (1, 1), OwnerName = "Oleh" },
                 new Robot.Common.Robot() { Position = new (0, 0), OwnerName = "Some Owner"}
             };
+            _map.Stations.Add(new EnergyStation()
+            {
+                Energy = 1000,
+                Position = new(5, 5),
+                RecoveryRate = 2
+            });
 
             // Act
             RobotCommand robotCommand = _algorithm.DoStep(robots, 0, _map);
@@ -166,6 +172,7 @@ namespace Sivak.Oleh.RobotChallenge.Test
 
         [TestCase(3, 7, 60)]
         [TestCase(5, 5, 100)]
+        [TestCase(2, 1, 7)]
         public void DoStep_EnoughEnergyToReachStation_ReturnsMoveCommandToStation(int stationX, int stationY, int robotEnergy)
         {
             // Arrange
@@ -193,15 +200,17 @@ namespace Sivak.Oleh.RobotChallenge.Test
             }
         }
 
-        [TestCase(10, 10, 50)]
-        [TestCase(3, 5, 25)]
+        [TestCase(10, 10, 1, 0, 50, 3, 2)]
+        [TestCase(5, 5, 1, 0, 25, 3, 2)]
+        [TestCase(2, 5, 1, 0, 15, 2, 2)]
+        [TestCase(3, 1, 5, 5, 15, 3, 3)]
 
-        public void DoStep_NotEnoughEnergyToReachStation_ReturnsMoveCommandWithOneDiagonalStepTowardsStation(int stationX, int stationY, int robotEnergy)
+        public void DoStep_NotEnoughEnergyToReachStation_ReturnsMoveCommandWithMaxStepTowardsStation(int stationX, int stationY, int robotX, int robotY, int robotEnergy, int expectedX, int expectedY)
         {
             // Arrange
             List<Robot.Common.Robot> robots = new ()
             {
-                new Robot.Common.Robot() { Energy = robotEnergy, Position = new (1, 0), OwnerName = "Oleh" },
+                new Robot.Common.Robot() { Energy = robotEnergy, Position = new (robotX, robotY), OwnerName = "Oleh" },
                 new Robot.Common.Robot() { Position = new (2, 2), OwnerName = "Some Owner" }
             };
             _map.Stations.Add(new EnergyStation()
@@ -210,7 +219,7 @@ namespace Sivak.Oleh.RobotChallenge.Test
                 Position = new (stationX, stationY),
                 RecoveryRate = 2
             });
-            Position expectedPosition = new (2, 1);
+            Position expectedPosition = new (expectedX, expectedY);
 
             // Act
             RobotCommand robotCommand = _algorithm.DoStep(robots, 0, _map);

@@ -10,52 +10,76 @@ namespace Sivak.Oleh.RobotChallenge
 
         public RobotCommand DoStep(IList<Robot.Common.Robot> robots, int robotToMoveIndex, Map map)
         {
+            Position stationPosition = FindNearestFreeStation(robots[robotToMoveIndex], map, robots);
             Robot.Common.Robot movingRobot = robots[robotToMoveIndex];
             int myRobotsCount = robots.Where(r => r.OwnerName == Author).Count();
-            if (movingRobot.Energy > 300 && myRobotsCount < 100)
+
+            // Spawn new robot if enough energy, not max robots and a free station exists
+            if (movingRobot.Energy > 300 && myRobotsCount < 100 && stationPosition != null)
             {
                 return new CreateNewRobotCommand();
             }
 
-            Position stationPosition = FindNearestFreeStation(robots[robotToMoveIndex], map, robots);
-
+            // If no station attack other robot
             if (stationPosition == null)
             {
+                // TO DO: add attack mechanism
                 Position bottomLeftPosition = new Position(movingRobot.Position.X - 1, movingRobot.Position.Y - 1);
                 return new MoveCommand() { NewPosition = bottomLeftPosition };
             }
 
+            // If on station collect energy
             if (stationPosition == movingRobot.Position)
             {
                 return new CollectEnergyCommand();
             }
             else
             {
-                // If not enough energy to reach station, go one step towards it
+                // If not enough energy to reach station, make smaller towards it
                 if (movingRobot.Energy < DistanceHelper.FindDistance(movingRobot.Position, stationPosition))
                 {
-                    // X axis
+                    List<int> stepValues = new List<int>() { 1, 2 };
                     int stepX = 0;
-                    if (movingRobot.Position.X - stationPosition.X > 0)
-                    {
-                        stepX = -1;
-                    }
-                    else if (movingRobot.Position.X - stationPosition.X < 0)
-                    {
-                        stepX = 1;
-                    }
-
-                    // Y axis
                     int stepY = 0;
-                    if (movingRobot.Position.Y - stationPosition.Y > 0)
+
+                    bool isXSet = movingRobot.Position.X == stationPosition.X;
+                    bool isYSet = movingRobot.Position.Y == stationPosition.Y;
+
+                    foreach (int stepValue in stepValues)
                     {
-                        stepY = -1;
-                    }
-                    else if (movingRobot.Position.Y - stationPosition.Y < 0)
-                    {
-                        stepY = 1;
+                        // X axis
+                        if (!isXSet)
+                        {
+                            if (stationPosition.X - movingRobot.Position.X >= stepValue)
+                            {
+                                stepX = stepValue;
+                            }
+                            else if (stationPosition.X - movingRobot.Position.X <= -stepValue)
+                            {
+                                stepX = -stepValue;
+                            }
+                        }
+                        
+                        // Y axis
+                        if (!isYSet)
+                        {
+                            if (stationPosition.Y - movingRobot.Position.Y >= stepValue)
+                            {
+                                stepY = stepValue;
+                            }
+                            else if (stationPosition.Y - movingRobot.Position.Y <= -stepValue)
+                            {
+                                stepY = -stepValue;
+                            }
+                        }
+
+                        System.Console.WriteLine($"robotX: {movingRobot.Position.X}; stationX: {stationPosition.X}");
+                        System.Console.WriteLine($"robotY: {movingRobot.Position.Y}; stationY: {stationPosition.Y}");
+                        System.Console.WriteLine($"stepX: {stepX}; stepY: {stepY}");
+                        System.Console.WriteLine($"");
                     }
 
+                    System.Console.WriteLine($"{movingRobot.Position.X + stepX} : {movingRobot.Position.Y + stepY}");
                     return new MoveCommand() { NewPosition = new Position(movingRobot.Position.X + stepX, movingRobot.Position.Y + stepY) };
                 }
 
