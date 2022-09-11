@@ -1,6 +1,8 @@
-﻿using Robot.Common;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
+
+using Robot.Common;
 
 namespace Sivak.Oleh.RobotChallenge
 {
@@ -10,18 +12,18 @@ namespace Sivak.Oleh.RobotChallenge
 
         public RobotCommand DoStep(IList<Robot.Common.Robot> robots, int robotToMoveIndex, Map map)
         {
-            Position stationPosition = FindNearestFreeStation(robots[robotToMoveIndex], map, robots);
+            Position stationSpot = FindBestStationSpot(robots[robotToMoveIndex], map, robots, out EnergyStation nearestStation);
             Robot.Common.Robot movingRobot = robots[robotToMoveIndex];
             int myRobotsCount = robots.Where(r => r.OwnerName == Author).Count();
 
             // Spawn new robot if enough energy, not max robots and a free station exists
-            if (movingRobot.Energy > 300 && myRobotsCount < 100 && stationPosition != null)
+            if (movingRobot.Energy > 300 && myRobotsCount < 100 && stationSpot != null)
             {
                 return new CreateNewRobotCommand();
             }
 
             // If no station attack other robot
-            if (stationPosition == null)
+            if (stationSpot == null)
             {
                 // TO DO: add attack mechanism
                 Position bottomLeftPosition = new Position(movingRobot.Position.X - 1, movingRobot.Position.Y - 1);
@@ -29,32 +31,32 @@ namespace Sivak.Oleh.RobotChallenge
             }
 
             // If on station collect energy
-            if (stationPosition == movingRobot.Position)
+            if (IsInStationProximity(nearestStation.Position, movingRobot.Position))
             {
                 return new CollectEnergyCommand();
             }
             else
             {
                 // If not enough energy to reach station, make smaller towards it
-                if (movingRobot.Energy < DistanceHelper.FindDistance(movingRobot.Position, stationPosition))
+                if (movingRobot.Energy < DistanceHelper.FindDistance(movingRobot.Position, stationSpot))
                 {
                     List<int> stepValues = new List<int>() { 1, 2 };
                     int stepX = 0;
                     int stepY = 0;
 
-                    bool isXSet = movingRobot.Position.X == stationPosition.X;
-                    bool isYSet = movingRobot.Position.Y == stationPosition.Y;
+                    bool isXSet = movingRobot.Position.X == stationSpot.X;
+                    bool isYSet = movingRobot.Position.Y == stationSpot.Y;
 
                     foreach (int stepValue in stepValues)
                     {
                         // X axis
                         if (!isXSet)
                         {
-                            if (stationPosition.X - movingRobot.Position.X >= stepValue)
+                            if (stationSpot.X - movingRobot.Position.X >= stepValue)
                             {
                                 stepX = stepValue;
                             }
-                            else if (stationPosition.X - movingRobot.Position.X <= -stepValue)
+                            else if (stationSpot.X - movingRobot.Position.X <= -stepValue)
                             {
                                 stepX = -stepValue;
                             }
@@ -63,55 +65,129 @@ namespace Sivak.Oleh.RobotChallenge
                         // Y axis
                         if (!isYSet)
                         {
-                            if (stationPosition.Y - movingRobot.Position.Y >= stepValue)
+                            if (stationSpot.Y - movingRobot.Position.Y >= stepValue)
                             {
                                 stepY = stepValue;
                             }
-                            else if (stationPosition.Y - movingRobot.Position.Y <= -stepValue)
+                            else if (stationSpot.Y - movingRobot.Position.Y <= -stepValue)
                             {
                                 stepY = -stepValue;
                             }
                         }
-
-                        System.Console.WriteLine($"robotX: {movingRobot.Position.X}; stationX: {stationPosition.X}");
-                        System.Console.WriteLine($"robotY: {movingRobot.Position.Y}; stationY: {stationPosition.Y}");
-                        System.Console.WriteLine($"stepX: {stepX}; stepY: {stepY}");
-                        System.Console.WriteLine($"");
                     }
 
-                    System.Console.WriteLine($"{movingRobot.Position.X + stepX} : {movingRobot.Position.Y + stepY}");
                     return new MoveCommand() { NewPosition = new Position(movingRobot.Position.X + stepX, movingRobot.Position.Y + stepY) };
                 }
 
                 // Go directly to the station
-                return new MoveCommand() { NewPosition = stationPosition };
+                return new MoveCommand() { NewPosition = stationSpot };
             }
         }
 
-        public Position FindNearestFreeStation(Robot.Common.Robot movingRobot, Map map, IList<Robot.Common.Robot> robots)
+        private bool IsInStationProximity(Position stationPosition, Position robotPosition)
         {
-            EnergyStation nearest = null;
+            return Math.Abs(stationPosition.X - robotPosition.X) <= 2 && Math.Abs(stationPosition.Y - robotPosition.Y) <= 2;
+        }
+
+        public Position FindBestStationSpot(Robot.Common.Robot movingRobot, Map map, IList<Robot.Common.Robot> robots, out EnergyStation nearestStation)
+        {
+            Position nearestSpot = null;
             int minDistance = int.MaxValue;
+            nearestStation = null;
 
             foreach (var station in map.Stations)
             {
-                if (IsStationFree(station, movingRobot, robots))
+                if (IsStationReasonablyFree(station, movingRobot, robots))
                 {
-                    int currentDistance = DistanceHelper.FindDistance(station.Position, movingRobot.Position);
+                    Position stationSpot = FindStationSpot(station, movingRobot, robots);
+                    int currentDistance = DistanceHelper.FindDistance(stationSpot, movingRobot.Position);
                     if (currentDistance < minDistance)
                     {
                         minDistance = currentDistance;
-                        nearest = station;
+                        nearestSpot = stationSpot;
+                        nearestStation = station;
                     }
                 }
             }
 
-            return nearest?.Position;
+            return nearestSpot;
         }
 
-        public bool IsStationFree(EnergyStation station, Robot.Common.Robot movingRobot, IList<Robot.Common.Robot> robots)
+        // Is only 0-1 occupied cells
+        public bool IsStationReasonablyFree(EnergyStation station, Robot.Common.Robot movingRobot, IList<Robot.Common.Robot> robots)
         {
-            return IsCellFree(station.Position, movingRobot, robots);
+            int occupiedCellsCount = 0;
+            int stationX = station.Position.X;
+            int stationY = station.Position.Y;
+
+            // *****
+            // *****
+            // **0**
+            // *****
+            // *****
+            int i = stationX - 2 > 0 ? stationX - 2 : 0;
+            int n = stationX + 2 <= 100 ? stationX + 2 : 100;
+            int m = stationY + 2 <= 100 ? stationY + 2 : 100;
+
+            while (i <= n)
+            {
+                int j = stationY - 2 > 0 ? stationY - 2 : 0;
+
+                while (j <= m)
+                {
+                    if (!IsCellFree (new Position (i, j), movingRobot, robots))
+                    {
+                        ++occupiedCellsCount;
+                    }
+
+                    if (occupiedCellsCount > 1)
+                    {
+                        return false;
+                    }
+                    ++j;
+                }
+                ++i;
+            }
+
+            return true;
+        }
+
+        public Position FindStationSpot(EnergyStation station, Robot.Common.Robot movingRobot, IList<Robot.Common.Robot> robots)
+        {
+            Position nearestStationSpot = null;
+            int minDistance = int.MaxValue;
+
+            int stationX = station.Position.X;
+            int stationY = station.Position.Y;
+
+            // *****
+            // *****
+            // **0**
+            // *****
+            // *****
+            int i = stationX - 2 > 0 ? stationX - 2 : 0;
+            int n = stationX + 2 <= 100 ? stationX + 2 : 100;
+            int m = stationY + 2 <= 100 ? stationY + 2 : 100;
+
+            while (i <= n)
+            {
+                int j = stationY - 2 > 0 ? stationY - 2 : 0;
+
+                while (j <= m)
+                {
+                    Position currentPosition = new Position(i, j);
+                    int currentDistance = DistanceHelper.FindDistance(movingRobot.Position, currentPosition);
+                    if (IsCellFree(currentPosition, movingRobot, robots) && currentDistance < minDistance)
+                    {
+                        nearestStationSpot = currentPosition;
+                        minDistance = currentDistance;
+                    }
+                    ++j;
+                }
+                ++i;
+            }
+
+            return nearestStationSpot;
         }
 
         public bool IsCellFree(Position cell, Robot.Common.Robot movingRobot, IList<Robot.Common.Robot> robots)

@@ -57,13 +57,13 @@ namespace Sivak.Oleh.RobotChallenge.Test
         }
 
         [Test]
-        public void FindNearestStation_TwoFreeStations_ReturnsNearest()
+        public void FindBestStationSpot_TwoFreeStations_ReturnsNearest()
         {
             // Arrange
             Robot.Common.Robot movingRobot = new () { Position = new (0, 0), OwnerName = "Oleh" };
             List<EnergyStation> stations = new ()
             {
-                new EnergyStation() { Position = new (2, 2) },
+                new EnergyStation() { Position = new (5, 5) },
                 new EnergyStation() { Position = new (3, 4) }
             };
             _map.Stations = stations;
@@ -72,24 +72,21 @@ namespace Sivak.Oleh.RobotChallenge.Test
                 new Robot.Common.Robot() { Position = new (1, 1), OwnerName = "Some Owner" },
                 new Robot.Common.Robot() { Position = new (2, 1), OwnerName = "Some Owner" }
             };
-            Position expectedPosition = new (2, 2);
+            Position expectedPosition = new (1, 2);
 
             // Act
-            Position energyStationPosition = _algorithm.FindNearestFreeStation(movingRobot, _map, robots);
+            Position energyStationPosition = _algorithm.FindBestStationSpot(movingRobot, _map, robots, out EnergyStation nearestStation);
 
             // Assert
             energyStationPosition.Should().Be(expectedPosition);
         }
 
         [Test]
-        public void FindNearestStation_NoFreeStations_ReturnsNull()
+        public void FindBestStationSpot_NoFreeStations_ReturnsNull()
         {
             // Arrange
             Robot.Common.Robot movingRobot = new () { Position = new (0, 0), OwnerName = "Oleh" };
-            List<EnergyStation> stations = new ()
-            {
-                new EnergyStation() { Position = new (1, 1) }
-            };
+            List<EnergyStation> stations = new();
             _map.Stations = stations;
             List<Robot.Common.Robot> robots = new ()
             {
@@ -97,10 +94,74 @@ namespace Sivak.Oleh.RobotChallenge.Test
             };
 
             // Act
-            Position energyStationPosition = _algorithm.FindNearestFreeStation(movingRobot, _map, robots);
+            Position energyStationPosition = _algorithm.FindBestStationSpot(movingRobot, _map, robots, out EnergyStation nearestStation);
 
             // Assert
             energyStationPosition.Should().BeNull();
+        }
+
+        [Test]
+        public void IsStationReasonablyFree_OneOccupiedCell_ReturnsTrue()
+        {
+            // Arrange
+            EnergyStation station = new () { Position = new (0, 0) };
+            Robot.Common.Robot movingRobot = new () { Position = new (5, 5), OwnerName = "Oleh" };
+            List<Robot.Common.Robot> robots = new()
+            {
+                new Robot.Common.Robot() { Position = new (5, 5), OwnerName = "Oleh" },
+                new Robot.Common.Robot() { Position = new (0, 2), OwnerName = "Some Ower" }
+            };
+
+            // Act
+            bool isStationReasonablyFree = _algorithm.IsStationReasonablyFree(station, movingRobot, robots);
+
+            // Assert 
+            isStationReasonablyFree.Should().BeTrue();
+        }
+
+        [Test]
+        public void IsStationReasonablyFree_TwoOccupiedCellsCells_ReturnsFalse()
+        {
+            // Arrange
+            EnergyStation station = new() { Position = new(100, 100) };
+            Robot.Common.Robot movingRobot = new() { Position = new(5, 5), OwnerName = "Oleh" };
+            List<Robot.Common.Robot> robots = new()
+            {
+                new Robot.Common.Robot() { Position = new(5, 5), OwnerName = "Oleh" },
+                new Robot.Common.Robot() { Position = new(98, 100), OwnerName = "Some Ower" },
+                new Robot.Common.Robot() { Position = new(99, 100), OwnerName = "Some Ower" }
+            };
+
+            // Act
+            bool isStationReasonablyFree = _algorithm.IsStationReasonablyFree(station, movingRobot, robots);
+
+            // Assert 
+            isStationReasonablyFree.Should().BeFalse();
+        }
+
+        [Test]
+        public void FindStationSpot_FreeDiagonalSpot_ReturnsDiagonalSpot()
+        {
+            // Arrange 
+            EnergyStation station = new () { Position = new (0, 0) };
+            Robot.Common.Robot movingRobot = new () { Position = new(5, 5), OwnerName = "Oleh" };
+            List<Robot.Common.Robot> robots = new ()
+            {
+                new Robot.Common.Robot() { Position = new (5, 5), OwnerName = "Oleh" },
+                new Robot.Common.Robot() { Position = new (0, 2), OwnerName = "Some Ower" },
+                new Robot.Common.Robot() { Position = new (1, 2), OwnerName = "Some Ower" }
+            };
+
+            // Act
+            Position nearest = _algorithm.FindStationSpot(station, movingRobot, robots);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                nearest.X.Should().Be(2);
+                nearest.Y.Should().Be(2);
+            }
+
         }
 
         [Test]
@@ -170,10 +231,10 @@ namespace Sivak.Oleh.RobotChallenge.Test
             robotCommand.Should().BeOfType<CollectEnergyCommand>();
         }
 
-        [TestCase(3, 7, 60)]
-        [TestCase(5, 5, 100)]
-        [TestCase(2, 1, 7)]
-        public void DoStep_EnoughEnergyToReachStation_ReturnsMoveCommandToStation(int stationX, int stationY, int robotEnergy)
+        [TestCase(3, 7, 60, 1, 5)]
+        [TestCase(5, 5, 100, 3, 3)]
+        [TestCase(4, 1, 9, 2, 0)]
+        public void DoStep_EnoughEnergyToReachStation_ReturnsMoveCommandToStation(int stationX, int stationY, int robotEnergy, int expectedX, int expectedY)
         {
             // Arrange
             List<Robot.Common.Robot> robots = new ()
@@ -187,7 +248,6 @@ namespace Sivak.Oleh.RobotChallenge.Test
                 Position = new (stationX, stationY),
                 RecoveryRate = 2
             });
-            Position expectedPosition = new (stationX, stationY);
 
             // Act
             RobotCommand robotCommand = _algorithm.DoStep(robots, 0, _map);
@@ -196,14 +256,15 @@ namespace Sivak.Oleh.RobotChallenge.Test
             using (new AssertionScope())
             {
                 robotCommand.Should().BeOfType<MoveCommand>();
-                ((MoveCommand)robotCommand).NewPosition.Should().Be(expectedPosition);
+                ((MoveCommand)robotCommand).NewPosition.X.Should().Be(expectedX);
+                ((MoveCommand)robotCommand).NewPosition.Y.Should().Be(expectedY);
             }
         }
 
         [TestCase(10, 10, 1, 0, 50, 3, 2)]
-        [TestCase(5, 5, 1, 0, 25, 3, 2)]
-        [TestCase(2, 5, 1, 0, 15, 2, 2)]
-        [TestCase(3, 1, 5, 5, 15, 3, 3)]
+        [TestCase(7, 6, 1, 0, 25, 3, 2)]
+        [TestCase(1, 7, 1, 0, 15, 1, 2)]
+        [TestCase(3, 1, 8, 8, 15, 6, 6)]
 
         public void DoStep_NotEnoughEnergyToReachStation_ReturnsMoveCommandWithMaxStepTowardsStation(int stationX, int stationY, int robotX, int robotY, int robotEnergy, int expectedX, int expectedY)
         {
