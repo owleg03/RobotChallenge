@@ -17,17 +17,16 @@ namespace Sivak.Oleh.RobotChallenge
             int myRobotsCount = robots.Where(r => r.OwnerName == Author).Count();
 
             // Spawn new robot if enough energy, not max robots and a free station exists
-            if (movingRobot.Energy > 300 && myRobotsCount < 100 && stationSpot != null)
+            if (movingRobot.Energy > 300 && myRobotsCount < 50 && stationSpot != null)
             {
                 return new CreateNewRobotCommand();
             }
 
-            // If no station attack other robot
+            // If no station pass turn other robot
             if (stationSpot == null)
             {
-                // TO DO: add attack mechanism
-                Position bottomLeftPosition = new Position(movingRobot.Position.X - 1, movingRobot.Position.Y - 1);
-                return new MoveCommand() { NewPosition = bottomLeftPosition };
+                Position waitPosition = new Position(movingRobot.Position.X, movingRobot.Position.Y);
+                return new MoveCommand() { NewPosition = waitPosition };
             }
 
             // If on station collect energy
@@ -113,7 +112,6 @@ namespace Sivak.Oleh.RobotChallenge
             return nearestSpot;
         }
 
-        // Is only 0-1 occupied cells
         public bool IsStationReasonablyFree(EnergyStation station, Robot.Common.Robot movingRobot, IList<Robot.Common.Robot> robots)
         {
             int occupiedCellsCount = 0;
@@ -140,7 +138,7 @@ namespace Sivak.Oleh.RobotChallenge
                         ++occupiedCellsCount;
                     }
 
-                    if (occupiedCellsCount > 1)
+                    if (occupiedCellsCount > 0)
                     {
                         return false;
                     }
